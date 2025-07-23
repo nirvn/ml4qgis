@@ -239,8 +239,6 @@ class YoloObjectDetectionProcessingAlgorithm(QgsProcessingAlgorithm):
                                 df["mmup"] = ms.mapUnitsPerPixel()
                                 dfs.append(df)
 
-                    img.save(f"/home/webmaster/Desktop/yolo/tmp/{row}-{column}.jpg")
-
             if len(dfs) > 0:
                 # Concat data frames
                 df_all = pd.concat(dfs)
