@@ -87,6 +87,7 @@ class YoloObjectDetectionProcessingAlgorithm(QgsProcessingAlgorithm):
     MUPP = "MUPP"
     AREAS = "AREAS"
     MODEL = "MODEL"
+    MINIMUM_CONFIDENCE = "MINIMUM_CONFIDENCE"
     OUTPUT = "OUTPUT"
 
     def tr(self, string):
@@ -122,6 +123,18 @@ class YoloObjectDetectionProcessingAlgorithm(QgsProcessingAlgorithm):
                 QgsProcessingParameterNumber.Type.Double,
             )
         )
+        
+        self.addParameter(
+            QgsProcessingParameterNumber(
+                self.MINIMUM_CONFIDENCE,
+                self.tr("Minimum confidence threshold (value between 0.0 to 1.0)"),
+                QgsProcessingParameterNumber.Type.Double,
+                0.0,
+                False,
+                0.0,
+                1.0,
+            )
+        )
 
         self.addParameter(
             QgsProcessingParameterFeatureSource(
@@ -149,6 +162,7 @@ class YoloObjectDetectionProcessingAlgorithm(QgsProcessingAlgorithm):
     def processAlgorithm(self, parameters, context, feedback):
         input_layer = self.parameterAsRasterLayer(parameters, self.INPUT, context)
 
+        minimum_confidence = self.parameterAsDouble(parameters, self.MINIMUM_CONFIDENCE, context)
         mupp = self.parameterAsDouble(parameters, self.MUPP, context)
 
         areas_source = self.parameterAsSource(parameters, self.AREAS, context)
@@ -246,11 +260,12 @@ class YoloObjectDetectionProcessingAlgorithm(QgsProcessingAlgorithm):
                     lambda x: generate_wkt(x.extent, x.mmup, x.xyxy), axis=1
                 )
                 for index, row in df_all.iterrows():
-                    f = QgsFeature(output_fields)
-                    f.setAttribute("names", row["names"])
-                    f.setAttribute("confidence", row["confs"])
-                    f.setGeometry(QgsGeometry.fromWkt(row["wkt"]))
-                    output_sink.addFeature(f, QgsFeatureSink.Flag.FastInsert)
+                    if row["confs"] >= minimum_confidence:
+                        f = QgsFeature(output_fields)
+                        f.setAttribute("names", row["names"])
+                        f.setAttribute("confidence", row["confs"])
+                        f.setGeometry(QgsGeometry.fromWkt(row["wkt"]))
+                        output_sink.addFeature(f, QgsFeatureSink.Flag.FastInsert)
 
         output_sink.flushBuffer()
         del output_sink
