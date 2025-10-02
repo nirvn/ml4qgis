@@ -180,9 +180,9 @@ class YoloObjectDetectionProcessingAlgorithm(QgsProcessingAlgorithm):
 
         model = YOLO(model_file)
 
-        width_pixel = 640
-        output_size = QSize(width_pixel, width_pixel)
-        width_mu = width_pixel * mupp
+        tile_width_pixel = 640
+        output_size = QSize(tile_width_pixel, tile_width_pixel)
+        tile_width_mu = tile_width_pixel * mupp
 
         ms = QgsMapSettings()
         ms.setOutputDpi(96)
@@ -192,25 +192,35 @@ class YoloObjectDetectionProcessingAlgorithm(QgsProcessingAlgorithm):
 
         request = QgsFeatureRequest()
         request.setDestinationCrs(ms.destinationCrs(), context.transformContext())
+
+        feedback.pushInfo("Calculating number of tiles to be processed")
+
+        tiles_total = 0
         it = areas_source.getFeatures(request)
         for feature in it:
             if feedback.isCanceled():
                 break
 
             dfs = []
+            (columns, rows, _, _) = self.calculateColumnsRowsStarts(
+                feature.geometry().boundingBox(), tile_width_mu
+            )
+            tiles_total = tiles_total + (columns * rows)
+
+        feedback.pushInfo(f"{tiles_total} tiles will be processed")
+
+        tiles_current = 0
+        it = areas_source.getFeatures(request)
+        for feature in it:
+            if feedback.isCanceled():
+                break
 
             feedback.pushInfo(f"Looking for objects around area feature ID {feature.id()}")
 
-            bounding_box = feature.geometry().boundingBox()
-            columns = math.ceil(bounding_box.width() / width_mu)
-            start_x = bounding_box.xMinimum()
-            if bounding_box.width() % width_mu > 0:
-                start_x -= (bounding_box.width() % width_mu) / 2
-
-            rows = math.ceil(bounding_box.height() / width_mu)
-            start_y = bounding_box.yMinimum()
-            if bounding_box.height() % width_mu > 0:
-                start_y -= (bounding_box.height() % width_mu) / 2
+            dfs = []
+            (columns, rows, start_x, start_y) = self.calculateColumnsRowsStarts(
+                feature.geometry().boundingBox(), tile_width_mu
+            )
             for row in range(rows):
                 if feedback.isCanceled():
                     break
@@ -219,11 +229,14 @@ class YoloObjectDetectionProcessingAlgorithm(QgsProcessingAlgorithm):
                     if feedback.isCanceled():
                         break
 
+                    tiles_current = tiles_current + 1
+                    feedback.setProgress(tiles_current / tiles_total * 100)
+
                     extent = QgsRectangle(
-                        start_x + row * width_mu,
-                        start_y + column * width_mu,
-                        start_x + (row + 1) * width_mu,
-                        start_y + (column + 1) * width_mu,
+                        start_x + row * tile_width_mu,
+                        start_y + column * tile_width_mu,
+                        start_x + (row + 1) * tile_width_mu,
+                        start_y + (column + 1) * tile_width_mu,
                     )
                     ms.setExtent(extent)
 
@@ -233,13 +246,15 @@ class YoloObjectDetectionProcessingAlgorithm(QgsProcessingAlgorithm):
 
                     img = job.renderedImage().convertToFormat(QImage.Format_BGR888)
                     ptr = img.constBits()
-                    ptr.setsize(width_pixel * width_pixel * 3)
-                    arr = np.frombuffer(ptr, np.uint8).reshape((width_pixel, width_pixel, 3))
+                    ptr.setsize(tile_width_pixel * tile_width_pixel * 3)
+                    arr = np.frombuffer(ptr, np.uint8).reshape(
+                        (tile_width_pixel, tile_width_pixel, 3)
+                    )
 
                     results = model.predict(
                         device="cpu",
                         source=[arr],
-                        imgsz=width_pixel,
+                        imgsz=tile_width_pixel,
                         show=False,
                         save_txt=False,
                         max_det=3,
@@ -273,3 +288,16 @@ class YoloObjectDetectionProcessingAlgorithm(QgsProcessingAlgorithm):
         del output_sink
 
         return {self.OUTPUT: output_filename}
+
+    def calculateColumnsRowsStarts(self, bounding_box, tile_width_mu):
+        columns = math.ceil(bounding_box.width() / tile_width_mu)
+        start_x = bounding_box.xMinimum()
+        if bounding_box.width() % tile_width_mu > 0:
+            start_x -= (bounding_box.width() % tile_width_mu) / 2
+
+        rows = math.ceil(bounding_box.height() / tile_width_mu)
+        start_y = bounding_box.yMinimum()
+        if bounding_box.height() % tile_width_mu > 0:
+            start_y -= (bounding_box.height() % tile_width_mu) / 2
+
+        return (columns, rows, start_x, start_y)
