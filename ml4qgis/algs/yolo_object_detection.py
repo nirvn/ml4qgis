@@ -109,7 +109,9 @@ class YoloObjectDetectionProcessingAlgorithm(QgsProcessingAlgorithm):
         return self.tr("Object Detection")
 
     def shortHelpString(self):
-        return self.tr("Detect objects using YOLO trained models")
+        return self.tr(
+            'Detect objects using trained YOLO (You Only Look Once) model weight files (.pt). These models offer accurate and speedy real-time object detection.\n\nTo know how to train YOLO models, follow <a href="https://docs.ultralytics.com/quickstart/">this quickstart guide</a>.'
+        )
 
     def initAlgorithm(self, config=None):
         self.addParameter(QgsProcessingParameterFile(self.MODEL, self.tr("YOLO model file")))
@@ -119,11 +121,11 @@ class YoloObjectDetectionProcessingAlgorithm(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterNumber(
                 self.MUPP,
-                self.tr("Map unit per pixel (MUPP)"),
+                self.tr("Map units per pixel (MUPP)"),
                 QgsProcessingParameterNumber.Type.Double,
             )
         )
-        
+
         self.addParameter(
             QgsProcessingParameterNumber(
                 self.MINIMUM_CONFIDENCE,
