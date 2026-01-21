@@ -195,15 +195,21 @@ class YoloObjectDetectionProcessingAlgorithm(QgsProcessingAlgorithm):
 
         feedback.pushInfo("Calculating number of tiles to be processed")
 
+        raster_extent = input_layer.extent()
         tiles_total = 0
         it = areas_source.getFeatures(request)
         for feature in it:
             if feedback.isCanceled():
                 break
 
+            feature_bbox = feature.geometry().boundingBox()
+            intersected_bbox = feature_bbox.intersect(raster_extent)
+            if intersected_bbox.isEmpty():
+                continue
+
             dfs = []
             (columns, rows, _, _) = self.calculateColumnsRowsStarts(
-                feature.geometry().boundingBox(), tile_width_mu
+                intersected_bbox, tile_width_mu
             )
             tiles_total = tiles_total + (columns * rows)
 
@@ -215,11 +221,17 @@ class YoloObjectDetectionProcessingAlgorithm(QgsProcessingAlgorithm):
             if feedback.isCanceled():
                 break
 
+            feature_bbox = feature.geometry().boundingBox()
+            intersected_bbox = feature_bbox.intersect(raster_extent)
+            if intersected_bbox.isEmpty():
+                feedback.pushInfo(f"Skipping feature ID {feature.id()}, not covering raster area")
+                continue
+
             feedback.pushInfo(f"Looking for objects around area feature ID {feature.id()}")
 
             dfs = []
             (columns, rows, start_x, start_y) = self.calculateColumnsRowsStarts(
-                feature.geometry().boundingBox(), tile_width_mu
+                intersected_bbox, tile_width_mu
             )
             for row in range(rows):
                 if feedback.isCanceled():
